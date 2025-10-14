@@ -20,13 +20,11 @@ public class DialogStateData implements Serializable {
     private Long chatId;
     private DialogStateType state;
     private BigDecimal amount;
-    private ExpenseCategory category;
-    private IncomeSource incomeSource;
+    private Category category;
     private Account account;
     private LocalDate transactionDate;
     private String comment;
     private LocalDateTime lastUpdated;
-    private Boolean isComplete;
-    private Boolean isExpense;
-    private Boolean isIncome;
+    private boolean isExpense;
+    private boolean isIncome;
 }

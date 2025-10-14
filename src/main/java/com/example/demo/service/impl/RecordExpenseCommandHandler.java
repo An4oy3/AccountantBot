@@ -1,14 +1,13 @@
 package com.example.demo.service.impl;
 
 import com.example.demo.model.entity.Account;
+import com.example.demo.model.entity.Category;
+import com.example.demo.model.entity.CategoryType;
 import com.example.demo.model.entity.DialogStateData;
 import com.example.demo.model.enums.BotMainMenuButton;
 import com.example.demo.model.enums.DialogStateType;
-import com.example.demo.model.enums.ExpenseCategory;
-import com.example.demo.service.AccountService;
-import com.example.demo.service.BotCommandHandler;
-import com.example.demo.service.DialogStateService;
-import com.example.demo.service.TransactionService;
+import com.example.demo.service.*;
+import com.example.demo.service.util.CategoryKeyboardHelper;
 import com.example.demo.service.util.InlineCalendarUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
@@ -21,13 +20,10 @@ import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKe
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.YearMonth;
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import java.util.regex.Pattern;
 
-import static com.example.demo.model.enums.DialogStateType.AWAITING_ACCOUNT_AND_DATE;
 import static com.example.demo.model.enums.DialogStateType.AWAITING_CATEGORY_FOR_EXPENSE;
 import static com.example.demo.service.util.TelegramUpdateHelper.*;
 
@@ -50,12 +46,15 @@ public class RecordExpenseCommandHandler implements BotCommandHandler {
     private static final Set<DialogStateType> SUPPORTED_STATES = Set.of(
             DialogStateType.AWAITING_AMOUNT,
             DialogStateType.AWAITING_DESCRIPTION,
-            DialogStateType.AWAITING_CONFIRMATION
+            DialogStateType.AWAITING_CONFIRMATION,
+            DialogStateType.AWAITING_ACCOUNT_AND_DATE,
+            DialogStateType.AWAITING_CATEGORY_FOR_EXPENSE
     );
 
 
     private final DialogStateService dialogStateService;
     private final TransactionService transactionService;
+    private final CategoryService categoryService;
     private final AccountService accountService;
 
 
@@ -68,13 +67,8 @@ public class RecordExpenseCommandHandler implements BotCommandHandler {
         DialogStateData state = dialogStateService.getState(chatId);
         String text = getEffectiveText(update);
 
-        return text.equalsIgnoreCase(BotMainMenuButton.RECORD_EXPENSE.getText())
-                || (SUPPORTED_STATES.contains(dialogStateService.getStateType(chatId)) && state.getIsExpense())
-                || (hasCallback(update) && AWAITING_CATEGORY_FOR_EXPENSE.equals(state.getState()))
-                || (AWAITING_ACCOUNT_AND_DATE.equals(state.getState()) && (ExpenseCategory.isValidCategory(text) ||
-                                                                            text.startsWith("account:") ||
-                                                                            text.startsWith("date:") ||
-                                                                            text.startsWith("proceed_account_date:")));
+        return text.equalsIgnoreCase(BotMainMenuButton.RECORD_EXPENSE.getText()) || (state.isExpense()
+                && SUPPORTED_STATES.contains(dialogStateService.getStateType(chatId)));
     }
 
     @Override
@@ -113,7 +107,7 @@ public class RecordExpenseCommandHandler implements BotCommandHandler {
         return SendMessage.builder()
                 .chatId(chatId.toString())
                 .text("Сумма записана: " + currentState.getAmount() + ". Пожалуйста выберите категорию расхода.")
-                .replyMarkup(buildCategoryKeyboard(0, 6))
+                .replyMarkup(CategoryKeyboardHelper.buildCategoryKeyboard(0, 6, categoryService.getCategoriesByType(CategoryType.EXPENSE)))
                 .build();
     }
 
@@ -123,28 +117,40 @@ public class RecordExpenseCommandHandler implements BotCommandHandler {
             return SendMessage.builder()
                     .chatId(chatId.toString())
                     .text(CATEGORY_PROMPT_TEXT)
-                    .replyMarkup(buildCategoryKeyboard(page, 6))
+                    .replyMarkup(CategoryKeyboardHelper.buildCategoryKeyboard(page, 6, categoryService.getCategoriesByType(CategoryType.EXPENSE)))
                     .build();
         } else if(text.startsWith("category:")) {
             text = text.split(":")[1];
-
-            if (ExpenseCategory.isValidCategory(text)) {
-                currentState.setCategory(ExpenseCategory.valueOf(text));
-                currentState.setState(DialogStateType.AWAITING_ACCOUNT_AND_DATE);
-                dialogStateService.saveOrUpdate(currentState);
-                Account account = accountService.findDefaultAccount(chatId);
-                return SendMessage.builder()
-                        .chatId(chatId.toString())
-                        .text(ACCOUNT_AND_DATE_PROMPT_TEXT)
-                        .replyMarkup(InlineCalendarUtil.buildAccountAndDateKeyboard(chatId, account, null))
-                        .build();
+            String responseText;
+            if (categoryService.categoryExists(text, chatId)) {
+                Category selectedCategory = categoryService.getCategoryByName(text);
+                if (!selectedCategory.isExpense()) {
+                    return SendMessage.builder()
+                            .chatId(chatId.toString())
+                            .text("Категория \"" + text + "\" не является категорией расхода. Пожалуйста, выберите другую категорию.")
+                            .replyMarkup(CategoryKeyboardHelper.buildCategoryKeyboard(0, 6, categoryService.getCategoriesByType(CategoryType.EXPENSE)))
+                            .build();
+                }
+                currentState.setCategory(selectedCategory);
+                responseText = ACCOUNT_AND_DATE_PROMPT_TEXT;
+            } else {
+                currentState.setCategory(categoryService.createCategory(text, "EXPENSE", chatId));
+                responseText = "Категория \"" + text + "\" создана и выбрана. " + ACCOUNT_AND_DATE_PROMPT_TEXT;
             }
+            currentState.setState(DialogStateType.AWAITING_ACCOUNT_AND_DATE);
+            dialogStateService.saveOrUpdate(currentState);
+            Account account = accountService.findOrCreateDefaultAccount(chatId);
+            return SendMessage.builder()
+                    .chatId(chatId.toString())
+                    .text(responseText)
+                    .replyMarkup(InlineCalendarUtil.buildAccountAndDateKeyboard(chatId, account, null))
+                    .build();
         }
 
         return SendMessage.builder()
                 .chatId(chatId.toString())
                 .text(CATEGORY_PROMPT_TEXT)
-                .replyMarkup(buildCategoryKeyboard(0, 6))
+                .replyMarkup(CategoryKeyboardHelper.buildCategoryKeyboard(0, 6, categoryService.getCategoriesByType(CategoryType.EXPENSE)))
                 .build();
     }
 
@@ -156,7 +162,7 @@ public class RecordExpenseCommandHandler implements BotCommandHandler {
 
         return SendMessage.builder()
                 .chatId(chatId.toString())
-                .text(String.format(CONFIRMATION_PROMPT_TEXT, currentState.getAmount(), currentState.getCategory().getText(), comment))
+                .text(String.format(CONFIRMATION_PROMPT_TEXT, currentState.getAmount(), currentState.getCategory().getName(), comment))
                 .replyMarkup(buildConfirmationKeyboard())
                 .build();
     }
@@ -164,17 +170,23 @@ public class RecordExpenseCommandHandler implements BotCommandHandler {
     private SendMessage confirmationHandler(Long chatId, String message, DialogStateData currentState) {
         String text = message.trim().toLowerCase();
         if (text.equals("confirm")) {
-            currentState.setIsComplete(true);
-            // Here you would typically save the expense to the database
-            dialogStateService.setDialogStateType(chatId, DialogStateType.IDLE);
-            transactionService.addExpense(chatId, currentState.getAmount(), currentState.getCategory(), currentState.getComment(), null);
+            Account defaultAccount = accountService.findOrCreateDefaultAccount(chatId);
+            transactionService.addExpense(
+                    chatId,
+                    currentState.getAmount(),
+                    currentState.getCategory(),
+                    currentState.getComment(),
+                    currentState.getTransactionDate() != null ? currentState.getTransactionDate().toString() : null,
+                    currentState.getAccount() != null ? currentState.getAccount() : defaultAccount
+            );
+            dialogStateService.clearState(chatId);
 
             return SendMessage.builder()
                     .chatId(chatId.toString())
-                    .text(String.format(SUCCESS_PROMPT_TEXT, currentState.getAmount(), currentState.getCategory().getText()))
+                    .text(String.format(SUCCESS_PROMPT_TEXT, currentState.getAmount(), currentState.getCategory().getName()))
                     .build();
         } else if (text.equals("cancel")) {
-            dialogStateService.setDialogStateType(chatId, DialogStateType.IDLE);
+            dialogStateService.clearState(chatId);
             return SendMessage.builder()
                     .chatId(chatId.toString())
                     .text("Запись расхода отменена.")
@@ -182,81 +194,126 @@ public class RecordExpenseCommandHandler implements BotCommandHandler {
         } else {
             return SendMessage.builder()
                     .chatId(chatId.toString())
-                    .text(String.format(CONFIRMATION_PROMPT_TEXT, currentState.getAmount(), currentState.getCategory().getText(), currentState.getComment()))
+                    .text(String.format(CONFIRMATION_PROMPT_TEXT, currentState.getAmount(), currentState.getCategory().getName(), currentState.getComment()))
                     .build();
         }
     }
 
     private SendMessage accountAndDateHandler(Long chatId, String message, DialogStateData currentState) {
-        if (StringUtils.hasText(message) && message.startsWith("proceed_account_date:")) {
-            String[] parts = message.split(":");
-            Long selectedAccountId = Long.parseLong(parts[1]);
-            LocalDate selectedDate = LocalDate.parse(parts[2]);
-            currentState.setAccount(accountService.findById(selectedAccountId).orElse(accountService.findDefaultAccount(chatId)));
-            currentState.setTransactionDate(selectedDate);
-            currentState.setState(DialogStateType.AWAITING_DESCRIPTION);
-            dialogStateService.saveOrUpdate(currentState);
-            return SendMessage.builder()
-                    .chatId(chatId.toString())
-                    .text(DESCRIPTION_PROMPT_TEXT)
-                    .replyMarkup(InlineKeyboardMarkup.builder()
-                            .keyboard(List.of(
-                                    List.of(InlineKeyboardButton.builder().text("Продолжить").callbackData("skip_description").build())
-                            ))
-                            .build())
-                    .build();
-        } else if (StringUtils.hasText(message) && message.startsWith("account:")) {
-            String accountPrefix = message.split(":")[1];
-            if (accountPrefix.equals("choose")) {
-                return SendMessage.builder()
-                        .chatId(chatId.toString())
-                        .text("Выберите счёт для расхода:")
-                        .replyMarkup(accountService.buildAccountSelectionKeyboard(chatId, false, "account:"))
-                        .build();
-            }
-            Account account = accountService.getAccountsByChatId(chatId, false).stream()
-                    .filter(acc -> accountPrefix.equalsIgnoreCase(acc.getId().toString()))
-                    .findFirst()
-                    .orElse(null);
-            if (account != null) {
-                currentState.setAccount(account);
-                dialogStateService.saveOrUpdate(currentState);
-                return SendMessage.builder()
-                        .chatId(chatId.toString())
-                        .text(ACCOUNT_AND_DATE_PROMPT_TEXT)
-                        .replyMarkup(InlineCalendarUtil.buildAccountAndDateKeyboard(chatId, account, currentState.getTransactionDate()))
-                        .build();
-            }
-        } else if (StringUtils.hasText(message) && message.startsWith("date")) {
-            String[] calenderData = message.split(":");
-            String calPrefix = calenderData[1];
-            if (calPrefix.equals("choose")) {
-                return SendMessage.builder()
-                        .chatId(chatId.toString())
-                        .text("Выберите дату для расхода:")
-                        .replyMarkup(InlineCalendarUtil.buildCalendar(
-                                YearMonth.now(),
-                                null))
-                        .build();
-            } else if (calPrefix.equals("accept")) {
-                LocalDate selectedDate = LocalDate.parse(calenderData[2]);
-                currentState.setTransactionDate(selectedDate);
-                dialogStateService.saveOrUpdate(currentState);
-                Account selectedAccount = currentState.getAccount() != null ? currentState.getAccount() : accountService.findDefaultAccount(chatId);
-                return SendMessage.builder()
-                        .chatId(chatId.toString())
-                        .text(ACCOUNT_AND_DATE_PROMPT_TEXT)
-                        .replyMarkup(InlineCalendarUtil.buildAccountAndDateKeyboard(chatId, selectedAccount, selectedDate))
-                        .build();
-            } else {
-                return SendMessage.builder()
-                        .chatId(chatId.toString())
-                        .text(ACCOUNT_AND_DATE_PROMPT_TEXT)
-                        .replyMarkup(InlineCalendarUtil.handleCalendarNavigation(message))
-                        .build();
-            }
+        if (!StringUtils.hasText(message)) {
+            return null;
+        }
+        if (message.startsWith("proceed_account_date:")) {
+            return handleProceedAccountDate(chatId, message, currentState);
+        }
+        if (message.startsWith("account:")) {
+            return handleAccountAction(chatId, message, currentState);
+        }
+        if (message.startsWith("date")) {
+            return handleDateAction(chatId, message, currentState);
         }
         return null;
+    }
+
+    private SendMessage handleProceedAccountDate(Long chatId, String message, DialogStateData state) {
+        // proceed_account_date:<accountId>:<yyyy-MM-dd>
+        String[] parts = message.split(":", 3);
+        if (parts.length < 3) {
+            return null;
+        }
+        long accountId;
+        LocalDate date;
+        try {
+            accountId = Long.parseLong(parts[1]);
+            date = LocalDate.parse(parts[2]);
+        } catch (Exception ex) {
+            return null;
+        }
+        state.setTransactionDate(date);
+        state.setAccount(accountService.findById(accountId).orElse(accountService.findOrCreateDefaultAccount(chatId)));
+        state.setState(DialogStateType.AWAITING_DESCRIPTION);
+        dialogStateService.saveOrUpdate(state);
+
+        return SendMessage.builder()
+                .chatId(chatId.toString())
+                .text(DESCRIPTION_PROMPT_TEXT)
+                .replyMarkup(InlineKeyboardMarkup.builder()
+                        .keyboard(List.of(
+                                List.of(InlineKeyboardButton.builder()
+                                        .text("Продолжить")
+                                        .callbackData("skip_description")
+                                        .build())
+                        ))
+                        .build())
+                .build();
+    }
+
+    private SendMessage handleAccountAction(Long chatId, String message, DialogStateData state) {
+        // account:choose | account:<id>
+        String[] parts = message.split(":", 2);
+        if (parts.length < 2) {
+            return null;
+        }
+        String suffix = parts[1];
+        if ("choose".equalsIgnoreCase(suffix)) {
+            return SendMessage.builder()
+                    .chatId(chatId.toString())
+                    .text("Выберите счёт для расхода:")
+                    .replyMarkup(accountService.buildAccountSelectionKeyboard(chatId, false, "account:"))
+                    .build();
+        }
+        Account account = accountService.getAccountsByChatId(chatId, false).stream()
+                .filter(acc -> acc.getId().toString().equalsIgnoreCase(suffix))
+                .findFirst()
+                .orElse(null);
+        if (account == null) {
+            return null;
+        }
+        state.setAccount(account);
+        dialogStateService.saveOrUpdate(state);
+        return SendMessage.builder()
+                .chatId(chatId.toString())
+                .text(ACCOUNT_AND_DATE_PROMPT_TEXT)
+                .replyMarkup(InlineCalendarUtil.buildAccountAndDateKeyboard(chatId, account, state.getTransactionDate()))
+                .build();
+    }
+
+    private SendMessage handleDateAction(Long chatId, String message, DialogStateData state) {
+        // date:choose | date:accept:<yyyy-MM-dd> | navigation
+        String[] parts = message.split(":", 3);
+        if (parts.length < 2) {
+            return null;
+        }
+        String action = parts[1];
+
+        if ("choose".equalsIgnoreCase(action)) {
+            return SendMessage.builder()
+                    .chatId(chatId.toString())
+                    .text("Выберите дату для расхода:")
+                    .replyMarkup(InlineCalendarUtil.buildCalendar(YearMonth.now(), null))
+                    .build();
+        }
+        if ("accept".equalsIgnoreCase(action) && parts.length == 3) {
+            try {
+                LocalDate selectedDate = LocalDate.parse(parts[2]);
+                state.setTransactionDate(selectedDate);
+                dialogStateService.saveOrUpdate(state);
+                Account account = state.getAccount() != null ? state.getAccount() : accountService.findOrCreateDefaultAccount(chatId);
+                return SendMessage.builder()
+                        .chatId(chatId.toString())
+                        .text(ACCOUNT_AND_DATE_PROMPT_TEXT)
+                        .replyMarkup(InlineCalendarUtil.buildAccountAndDateKeyboard(chatId, account, selectedDate))
+                        .build();
+            } catch (Exception ignored) {
+                return null;
+            }
+        }
+        // Calendar navigation fallback
+        return SendMessage.builder()
+                .chatId(chatId.toString())
+                .text(ACCOUNT_AND_DATE_PROMPT_TEXT)
+                .replyMarkup(InlineCalendarUtil.handleCalendarNavigation(message))
+                .build();
     }
 
 
@@ -269,7 +326,7 @@ public class RecordExpenseCommandHandler implements BotCommandHandler {
     }
 
     private SendMessage initHandler(Long chatId, DialogStateData dialogStateData) {
-        dialogStateData.setIsExpense(true);
+        dialogStateData.setExpense(true);
         dialogStateData.setState(DialogStateType.AWAITING_AMOUNT);
         dialogStateService.saveOrUpdate(dialogStateData);
         return SendMessage.builder()
@@ -286,52 +343,5 @@ public class RecordExpenseCommandHandler implements BotCommandHandler {
                 ))
                 .build();
     }
-
-    private InlineKeyboardMarkup buildCategoryKeyboard(int page, int pageSize) {
-        List<List<InlineKeyboardButton>> rows = new ArrayList<>();
-        ExpenseCategory[] categories = ExpenseCategory.values();
-        int totalCategories = (int) Arrays.stream(categories)
-                .filter(c -> c != ExpenseCategory.NONE)
-                .count();
-        int totalPages = (int) Math.ceil((double) totalCategories / pageSize);
-
-        int startIdx = page * pageSize;
-        int endIdx = Math.min(startIdx + pageSize, totalCategories);
-
-        List<ExpenseCategory> filtered = Arrays.stream(categories)
-                .filter(c -> c != ExpenseCategory.NONE)
-                .toList();
-
-        for (int i = startIdx; i < endIdx; i++) {
-            ExpenseCategory category = filtered.get(i);
-            InlineKeyboardButton button = InlineKeyboardButton.builder()
-                    .text(category.getText())
-                    .callbackData("category:" + category.name())
-                    .build();
-            rows.add(List.of(button));
-        }
-
-        List<InlineKeyboardButton> navRow = new ArrayList<>();
-        if (page > 0) {
-            navRow.add(InlineKeyboardButton.builder()
-                    .text("⬅️ Назад")
-                    .callbackData("category_page:" + (page - 1))
-                    .build());
-        }
-        if (page < totalPages - 1) {
-            navRow.add(InlineKeyboardButton.builder()
-                    .text("Вперёд ➡️")
-                    .callbackData("category_page:" + (page + 1))
-                    .build());
-        }
-        if (!navRow.isEmpty()) {
-            rows.add(navRow);
-        }
-
-        return InlineKeyboardMarkup.builder()
-                .keyboard(rows)
-                .build();
-    }
-
 }
 

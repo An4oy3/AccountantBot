@@ -34,7 +34,7 @@ public class Account extends BaseEntity {
      * ISO 4217 currency code (e.g. USD, EUR, RUB). Always uppercase, 3 letters.
      */
     @Column(name = "currency", nullable = false, length = 3)
-    private String currency;
+    private String currency = "PLN";
 
     /**
      * Owner (primary user) who created / controls this account.

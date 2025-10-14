@@ -94,7 +94,7 @@ class BotMessageServiceTest {
         when(userService.existsByChatId(300L)).thenReturn(true);
         when(commandRegistry.process(upd)).thenReturn(Optional.empty());
         Optional<SendMessage> respOpt = botMessageService.handleUpdate(upd);
-        assertThat(respOpt).isEmpty();
+        assertThat(respOpt).isNotEmpty();
     }
 
     @Test

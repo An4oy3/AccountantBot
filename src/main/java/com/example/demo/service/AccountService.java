@@ -50,7 +50,9 @@ public interface AccountService {
      */
     void deleteAccount(Long accountId);
 
-    Account findDefaultAccount(Long chatId);
+    Account findOrCreateDefaultAccount(Long chatId);
+
+    Optional<Account> findByNameAndOwnerId(String name, Long ownerId);
 
     /**
      * Build inline keyboard for selecting one of the user's accounts.

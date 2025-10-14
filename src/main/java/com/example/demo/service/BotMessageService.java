@@ -28,7 +28,7 @@ public class BotMessageService {
 
     /**
      * Process an update and return a SendMessage if a response is needed.
-     */ //TODO: Process callback queries also
+     */
     public Optional<SendMessage> handleUpdate(Update update) {
         if (!isValid(update)) {
             return Optional.empty();
@@ -50,8 +50,12 @@ public class BotMessageService {
             response = commandRegistry.process(update).orElse(null);
         }
         if (response == null) {
-            // No matching command found TODO: respond with default message or ignore
-            return Optional.empty();
+            dialogStateService.clearState(chatId);
+            return Optional.of(SendMessage.builder()
+                    .chatId(chatId)
+                    .text("Извините, я не понимаю вашу команду. Пожалуйста, выберите действие из меню.")
+                    .replyMarkup(buildStartKeyboard())
+                    .build());
         }
 
         return Optional.of(response);
@@ -68,7 +72,8 @@ public class BotMessageService {
                 KeyboardButton.builder().text(BotMainMenuButton.EXPORT.getText()).build()
         ));
         KeyboardRow row3 = new KeyboardRow(List.of(
-                KeyboardButton.builder().text(BotMainMenuButton.SETTINGS.getText()).build()
+                KeyboardButton.builder().text(BotMainMenuButton.SETTINGS.getText()).build(),
+                KeyboardButton.builder().text(BotMainMenuButton.RECORD_FAST_EXPENSE.getText()).build()
         ));
 
         return ReplyKeyboardMarkup.builder()

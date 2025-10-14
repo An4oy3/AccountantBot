@@ -137,9 +137,12 @@ public class Transaction extends BaseEntity {
     @Column(name = "external_ref", length = 128)
     private String externalRef;
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "category", length = 32)
-    private ExpenseCategory category;
+//    @Enumerated(EnumType.STRING)
+//    @Column(name = "category", length = 32)
+//    private ExpenseCategory category;
+    @ManyToOne()
+    @JoinColumn(name = "category_id")
+    private Category category;
     /**
      * TODO: For later implementation of idempotency.
      * Optional splits breaking down this transaction into multiple categories / budgets.

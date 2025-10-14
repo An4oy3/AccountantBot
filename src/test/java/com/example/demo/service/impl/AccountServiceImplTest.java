@@ -200,20 +200,20 @@ class AccountServiceImplTest {
     }
 
     @Test
-    void findDefaultAccountReturnsExistingFirst() {
+    void findOrCreateDefaultAccountReturnsExistingFirst() {
         Account existing = new Account(); existing.setName("Primary"); existing.setCurrency("USD"); setId(existing, 70L);
         when(userRepository.findByChatId(100L)).thenReturn(Optional.of(owner));
         when(accountRepository.findByOwnerChatIdAndArchivedFalse(100L)).thenReturn(List.of(existing));
-        Account result = service.findDefaultAccount(100L);
+        Account result = service.findOrCreateDefaultAccount(100L);
         assertThat(result).isSameAs(existing);
     }
 
     @Test
-    void findDefaultAccountCreatesWhenNone() {
+    void findOrCreateDefaultAccountCreatesWhenNone() {
         when(userRepository.findByChatId(100L)).thenReturn(Optional.of(owner));
         when(accountRepository.findByOwnerChatIdAndArchivedFalse(100L)).thenReturn(List.of());
         when(accountRepository.save(any(Account.class))).thenAnswer(inv -> { Account a = inv.getArgument(0); setId(a, 99L); return a; });
-        Account created = service.findDefaultAccount(100L);
+        Account created = service.findOrCreateDefaultAccount(100L);
         assertThat(created.getName()).isEqualTo("Alex's CASH Account");
         assertThat(created.getCurrency()).isEqualTo("PLN");
         assertThat(created.getType()).isEqualTo(AccountType.CASH);
@@ -254,9 +254,9 @@ class AccountServiceImplTest {
     }
 
     @Test
-    void findDefaultAccountOwnerNotFoundThrows() {
+    void findOrCreateDefaultAccountOwnerNotFoundThrows() {
         when(userRepository.findByChatId(777L)).thenReturn(Optional.empty());
-        assertThatThrownBy(() -> service.findDefaultAccount(777L))
+        assertThatThrownBy(() -> service.findOrCreateDefaultAccount(777L))
                 .isInstanceOf(NotFoundException.class)
                 .hasMessageContaining("Owner user not found: 777");
     }

@@ -30,7 +30,7 @@ class DialogStateServiceImplTest {
         DialogStateData d = new DialogStateData();
         d.setChatId(CHAT_ID);
         d.setState(type);
-        d.setIsExpense(true);
+        d.setExpense(true);
         d.setLastUpdated(LocalDateTime.now().minusMinutes(5));
         return d;
     }

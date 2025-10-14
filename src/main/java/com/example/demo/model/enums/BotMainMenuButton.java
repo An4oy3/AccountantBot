@@ -9,6 +9,7 @@ import lombok.Getter;
 public enum BotMainMenuButton {
     RECORD_EXPENSE("Записать расход"),
     RECORD_INCOME("Записать доход"),
+    RECORD_FAST_EXPENSE("Быстрый расход"),
     RECORD_TRANSFER("Записать перевод"),
     VIEW_REPORTS("Просмотреть отчёты"),
     STATISTICS("Статистика"),

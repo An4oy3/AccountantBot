@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Master Liquibase changelog: агрегирует подсеты (schema + seed) -->
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <!-- 001: создание всей схемы (таблицы, индексы, ограничения) -->
+    <include file="db/changelog/001-schema.sql" relativeToChangelogFile="false"/>
+
+    <!-- 002: наполнение глобальных категорий доходов и расходов -->
+    <include file="db/changelog/002-categories-seed.sql" relativeToChangelogFile="false"/>
+
+    <!-- 003: FK и индекс для parent_id -->
+    <include file="db/changelog/003-category-parent-fk.sql" relativeToChangelogFile="false"/>
+
+    <!-- 004: Подкатегории для некоторых глобальных expense категорий -->
+    <include file="db/changelog/004-categories-subcategories.sql" relativeToChangelogFile="false"/>
+
+</databaseChangeLog>

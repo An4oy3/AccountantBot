@@ -100,7 +100,7 @@ public class AccountServiceImpl implements AccountService {
 
     @Override
     @Transactional
-    public Account findDefaultAccount(Long chatId) {
+    public Account findOrCreateDefaultAccount(Long chatId) {
         User owner = userRepository.findByChatId(chatId)
                 .orElseThrow(() -> new NotFoundException("Owner user not found: " + chatId));
 
@@ -110,6 +110,13 @@ public class AccountServiceImpl implements AccountService {
             return createAccount(chatId, owner.getFirstName() + "'s CASH Account", AccountType.CASH, "PLN");
         }
         return accounts.get(0); // TODO: расширить выбор аккаунта позже
+    }
+
+    @Override
+    public Optional<Account> findByNameAndOwnerId(String name, Long ownerId) {
+        if (name == null || name.isBlank()) throw new IllegalArgumentException("name is required");
+        if (ownerId == null) throw new IllegalArgumentException("ownerId is required");
+        return accountRepository.findByNameAndOwnerChatId(name.trim(), ownerId);
     }
 
     @Override

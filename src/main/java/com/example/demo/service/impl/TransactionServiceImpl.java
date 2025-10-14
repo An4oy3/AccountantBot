@@ -5,6 +5,7 @@ import com.example.demo.model.entity.*;
 import com.example.demo.model.enums.ExpenseCategory;
 import com.example.demo.repository.*;
 import com.example.demo.service.AccountService;
+import com.example.demo.service.CategoryService;
 import com.example.demo.service.TransactionService;
 import com.example.demo.service.UserService;
 import lombok.RequiredArgsConstructor;
@@ -24,6 +25,7 @@ public class TransactionServiceImpl implements TransactionService {
     private final UserService userService;
     private final AccountService accountService;
     private final TransactionRepository transactionRepository;
+    private final CategoryService categoryService;
 
     private static final DateTimeFormatter[] DATE_PATTERNS = new DateTimeFormatter[]{
             DateTimeFormatter.ofPattern("yyyy-MM-dd"),
@@ -33,14 +35,24 @@ public class TransactionServiceImpl implements TransactionService {
 
     @Override
     @Transactional
-    public void addExpense(Long chatId, BigDecimal amount, ExpenseCategory category, String comment, String date) {
-        addTransaction(chatId, amount, category, comment, date, TransactionType.EXPENSE);
+    public void addExpense(Long chatId, BigDecimal amount, Category category, String comment, String date, Account account) {
+        addTransaction(chatId, amount, category, comment, date, TransactionType.EXPENSE, account);
     }
 
     @Override
     @Transactional
-    public void addIncome(Long chatId, BigDecimal amount, ExpenseCategory category, String comment, String date) {
-        addTransaction(chatId, amount, category, comment, date, TransactionType.INCOME);
+    public void addIncome(Long chatId, BigDecimal amount, Category category, String comment, String date, Account account) {
+        addTransaction(chatId, amount, category, comment, date, TransactionType.INCOME, account);
+    }
+
+    @Override
+    public List<Transaction> getAllByPeriod(Long chatId, LocalDate startDate, LocalDate endDate) {
+        User user = findUserByChatId(chatId);
+        return transactionRepository.findByOwnerAndOperationTimeBetween(
+                user,
+                startDate.atStartOfDay().toInstant(ZoneOffset.UTC),
+                endDate.plusDays(1).atStartOfDay().toInstant(ZoneOffset.UTC)
+        );
     }
 
     @Override
@@ -76,9 +88,8 @@ public class TransactionServiceImpl implements TransactionService {
 
     /* ===================== Internal helpers ===================== */
 
-    private void addTransaction(Long chatId, BigDecimal amount, ExpenseCategory category, String comment, String dateStr, TransactionType type) {
+    private void addTransaction(Long chatId, BigDecimal amount, Category category, String comment, String dateStr, TransactionType type, Account account) {
         User user = findUserByChatId(chatId);
-        Account account = accountService.findDefaultAccount(chatId);
         Instant opTime = parseDateOrNow(dateStr);
 
         Transaction trx = new Transaction();
@@ -93,6 +104,7 @@ public class TransactionServiceImpl implements TransactionService {
         trx.setPostedTime(Instant.now());
         trx.setCategory(category);
         transactionRepository.save(trx);
+        categoryService.incrementCategoryUsage(category);
     }
 
     private User findUserByChatId(Long chatId) {

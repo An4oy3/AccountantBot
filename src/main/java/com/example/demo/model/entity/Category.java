@@ -12,7 +12,7 @@ import java.util.Set;
 @Entity
 @Table(name = "categories",
         uniqueConstraints = {
-                @UniqueConstraint(name = "uk_category_owner_parent_name", columnNames = {"owner_id", "parent_id", "name"})
+                @UniqueConstraint(name = "uk_category_owner_name_type", columnNames = {"owner_id", "name", "type"})
         },
         indexes = {
                 @Index(name = "idx_category_owner", columnList = "owner_id"),
@@ -22,11 +22,11 @@ import java.util.Set;
  * Category forms a hierarchical tree (parent-child) for classifying expense or income
  * transactions. depth is stored for faster tree queries; owner null means global/shared
  * category usable by multiple users.
+ * Uniqueness: (owner, name, type) to allow same name for INCOME & EXPENSE.
  */
-//TODO: Revisit when implementing subcategories
 public class Category extends BaseEntity {
 
-    /** Human readable category name (unique among siblings for same owner). */
+    /** Human readable category name (unique among siblings for same owner & type). */
     @Column(nullable = false, length = 128)
     private String name;
 
@@ -40,15 +40,6 @@ public class Category extends BaseEntity {
     @Column(nullable = false, length = 16)
     private CategoryType type;
 
-    /** Parent category (null for root). */
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "parent_id")
-    private Category parent;
-
-    /** Direct children of this category. */
-    @OneToMany(mappedBy = "parent")
-    private Set<Category> children = new HashSet<>();
-
     /** Archive flag to hide from selection but keep historical links. */
     @Column(name = "archived", nullable = false)
     private boolean archived = false;
@@ -56,5 +47,31 @@ public class Category extends BaseEntity {
     /** Cached hierarchical depth (root=0) for efficient querying / sorting. */
     @Column(name = "depth", nullable = false)
     private int depth = 0;
+
+    /** Parent category (null for root). */
+    @ManyToOne()
+    @JoinColumn(name = "parent_id")
+    private Category parent;
+
+//TODO: Revisit when implementing subcategories
+// /** Direct children of this category. */
+//    @OneToMany(mappedBy = "parent", fetch = FetchType.LAZY)
+//    private Set<Category> children = new HashSet<>();
+
+    @Column(name = "usage_count")
+    private Long usageCount = 0L;
+
+
+    public Boolean isExpense() {
+        return CategoryType.EXPENSE.equals(this.type);
+    }
+
+    public Boolean isIncome() {
+        return CategoryType.INCOME.equals(this.type);
+    }
+
+    public Boolean isGlobal() {
+        return this.owner == null;
+    }
 
 }
