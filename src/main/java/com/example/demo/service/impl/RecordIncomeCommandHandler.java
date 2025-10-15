@@ -125,7 +125,7 @@ public class RecordIncomeCommandHandler implements BotCommandHandler {
             message = message.split(":")[1];
             String responseText;
             if (categoryService.categoryExists(message, chatId)) {
-                Category selectedSource = categoryService.getCategoryByName(message);
+                Category selectedSource = categoryService.getCategoryByName(message, CategoryType.INCOME);
                 if (!selectedSource.isIncome()) {
                     return SendMessage.builder()
                             .chatId(chatId.toString())

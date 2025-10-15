@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Optional;
 
 public interface CategoryRepository extends JpaRepository<Category, Long> {
-    Optional<Category> findByNameIgnoreCase(String name);
+    Optional<Category> findByNameIgnoreCaseAndType(String name, CategoryType type);
     List<Category> findByType(CategoryType type);
     List<Category> findByOwnerChatId(Long chatId);
     void deleteByName(String name);

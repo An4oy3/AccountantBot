@@ -23,25 +23,6 @@ services:
     volumes:
       - redis_data:/data
 
-  app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: accountantbot_app
-    env_file: [.env]
-    depends_on:
-      - db
-      - redis
-    environment:
-      SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL}
-      SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME}
-      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD}
-      SPRING_DATA_REDIS_HOST: redis
-      SPRING_DATA_REDIS_PORT: 6379
-    ports:
-      - "8080:8081"
-#    restart: unless-stopped
-
 volumes:
   db_data:
   redis_data:

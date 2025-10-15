@@ -1,6 +1,5 @@
 package com.example.demo.service.impl;
 
-import com.example.demo.exception.AlreadyExistsException;
 import com.example.demo.exception.NotFoundException;
 import com.example.demo.model.entity.Category;
 import com.example.demo.model.entity.CategoryType;
@@ -42,12 +41,12 @@ public class CategoryServiceImpl implements CategoryService {
     }
 
     @Override
-    public Category getCategoryByName(String name) {
+    public Category getCategoryByName(String name, CategoryType categoryType) {
         if (name == null || name.isBlank()) {
             throw new IllegalArgumentException("Category name must not be blank");
         }
 
-        return categoryRepository.findByNameIgnoreCase(name.trim())
+        return categoryRepository.findByNameIgnoreCaseAndType(name.trim(), categoryType)
                 .orElseThrow(() -> new IllegalArgumentException("Category not found: " + name));
     }
 

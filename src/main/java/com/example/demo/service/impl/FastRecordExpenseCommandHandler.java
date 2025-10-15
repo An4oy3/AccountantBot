@@ -118,7 +118,7 @@ public class FastRecordExpenseCommandHandler implements BotCommandHandler {
         // Находим категорию (глобальные и пользовательские). CategoryService#getCategoryByName кидает исключение если не найдена.
         Category category;
         try {
-            category = categoryService.getCategoryByName(parseResult.category());
+            category = categoryService.getCategoryByName(parseResult.category(), CategoryType.EXPENSE);
         } catch (Exception e) {
             // Попытка подобрать из доступных по нечёткому совпадению (начало строки)
             List<Category> similarCategory = categoryService.getSimilarCategory(parseResult.category(), chatId);
@@ -158,7 +158,7 @@ public class FastRecordExpenseCommandHandler implements BotCommandHandler {
         } else if(message.startsWith("category:")) {
             message = message.split(":")[1];
             if (categoryService.categoryExists(message, chatId)) {
-                Category selectedCategory = categoryService.getCategoryByName(message);
+                Category selectedCategory = categoryService.getCategoryByName(message, CategoryType.EXPENSE);
                 transactionService.addExpense(chatId, currentState.getAmount(), selectedCategory, currentState.getComment(), currentState.getTransactionDate().format(DateTimeFormatter.ISO_LOCAL_DATE), currentState.getAccount());
             }
             dialogStateService.clearState(chatId);

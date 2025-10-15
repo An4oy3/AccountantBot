@@ -8,7 +8,7 @@ import java.util.List;
 public interface CategoryService {
     List<String> getAllCategoryNames();
     List<Category> getAllCategories();
-    Category getCategoryByName(String name);
+    Category getCategoryByName(String name, CategoryType categoryType);
     List<Category> getCategoriesByType(CategoryType type);
     List<Category> getCategoriesByOwnerChatId(Long chatId);
     Category createCategory(String name, String type, Long ownerChatId);

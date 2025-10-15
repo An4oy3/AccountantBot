@@ -123,7 +123,7 @@ public class RecordExpenseCommandHandler implements BotCommandHandler {
             text = text.split(":")[1];
             String responseText;
             if (categoryService.categoryExists(text, chatId)) {
-                Category selectedCategory = categoryService.getCategoryByName(text);
+                Category selectedCategory = categoryService.getCategoryByName(text, CategoryType.EXPENSE);
                 if (!selectedCategory.isExpense()) {
                     return SendMessage.builder()
                             .chatId(chatId.toString())
